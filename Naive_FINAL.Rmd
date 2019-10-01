@@ -1,0 +1,146 @@
+---
+title: "Naive_FINAL"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+##Libraries--------------------------------------------
+library(tree)
+library(ISLR)
+library(boot)
+library(xgboost)
+library(tidyverse)
+library(leaflet)
+library(stringr)
+library(rgdal)
+library(lubridate)
+library(forecast)
+library(DT)
+library(prophet)
+library(caret)
+library(fastDummies)
+library(caret)
+library(class)
+library(e1071)
+library(ROCR)
+library(ggplot2)
+library(lattice)
+
+
+##Read the data
+mergedf <- read.csv("~/Desktop/DMProject/CrimeRentData.csv")
+
+##Remove columns
+mergedf <- within(mergedf, rm("X"))
+mergedf <- within(mergedf, rm("AreaName"))
+mergedf <- within(mergedf, rm("CrimeCodeDescription"))
+mergedf <- within(mergedf, rm("DRNumber"))
+mergedf <- within(mergedf, rm("Location.x"))
+mergedf <- within(mergedf, rm("PremiseDescription"))
+mergedf <- within(mergedf, rm("Variable"))
+mergedf <- within(mergedf, rm("Location.y"))
+mergedf <- within(mergedf, rm("Date"))
+mergedf <- within(mergedf, rm("VictimDescent"))
+#mergedf <-within(mergedf,rm("Neighborhood"))
+
+
+mergedf = na.omit(mergedf)
+mergedf$Year <- as.factor(mergedf$Year)
+mergedf$CrimeCode <- as.factor(mergedf$CrimeCode)
+mergedf$Neighborhood <- as.factor(mergedf$Neighborhood)
+
+##Remove extra columns
+mergedf<-within(mergedf, rm("DateOccurred"))
+mergedf<-within(mergedf, rm("Tract"))
+mergedf<-within(mergedf, rm("ReportingDistrict"))
+mergedf<-within(mergedf, rm("TimeOccured"))
+mergedf<-within(mergedf, rm("VictimAge"))
+mergedf<-within(mergedf, rm("VictimSex"))
+mergedf<-within(mergedf, rm("PremiseCode"))
+
+
+##Create Amount categories
+mergedf$Amount <- as.numeric(mergedf$Amount)
+
+ra <- range(mergedf$Amount)
+div <- (ra[2]-ra[1])/10
+ini <- ra[1]
+br <- rep(0,11)
+br[1]<-ra[1]
+for(i in 2:11){
+  ini<-ini+div
+  br[i]<-ini
+}
+
+mergedf$Renth <- cut(mergedf$Amount, 
+                     breaks=br, 
+                     labels=c("1","2","3","4","5","6","7","8","9","10"))
+
+mergedf <- within(mergedf,rm("Amount"))
+
+#Split the data
+set.seed(12345)
+inTrain <- createDataPartition(mergedf$Renth, p=0.7, list=FALSE)
+dftrain <- data.frame(mergedf[inTrain,])
+dftest <- data.frame(mergedf[-inTrain,])
+
+##Regression
+fit1<- naiveBayes(Renth~., data=mergedf)
+
+
+
+##Confusion Matrix
+ActualData <- dftest$Renth
+PredictedData<- predict(fit1,newdata=dftest[,-5])
+(table1 <- table(ActualData,PredictedData))
+
+##Accuracy
+sum=0
+er<-rep(0,10)
+for(i in 1:10){
+  er[i]<-table1[i,i]
+  sum=sum+table1[i,i]
+}
+
+(acc= sum/nrow(dftest))
+
+
+##Graph
+
+##Graph for max crime type for each rent category
+Rent_Category<- c(1,2,3,4,5,6,7,8,9,10)
+Crime_Code<- c(624,624,624,330,330,310,440,310,354,310)
+Number_Of_Records <- c(3385,15032,53317,19151,9764,9958,343,101,72,94)
+d <- data.frame(Rent_Category,Crime_Code,Number_Of_Records)
+
+#visualize training set
+a<-ggplot(d,aes(x=Rent_Category,y=Crime_Code,fill=Number_Of_Records))+
+  geom_bar(stat="identity")
+a
+
+##Graph for visual representation of confusion matrix
+
+cbp1 <- c("yellow","red","blue","black")
+table2 <- data.frame(table1)
+a<- ggplot(table2, aes(ActualData, PredictedData,color=Freq)) +
+  geom_point()
+
+a+scale_color_gradientn(colours=cbp1)
+
+No_of_Records<-rep(0,10)
+for(i in 1:10){
+  No_of_Records[i]<- table1[i,i]
+}
+
+plot(1:10,No_of_Records)
+
+
+
+#write.csv(counts, "~/Desktop/DMProject/NBGraph1.csv")
+
+
+```

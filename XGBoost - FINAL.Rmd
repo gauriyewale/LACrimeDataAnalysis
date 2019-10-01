@@ -1,0 +1,152 @@
+---
+title: "XGBoost-FINAL"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+##Libraries--------------------------------------------
+library(tree)
+library(ISLR)
+library(boot)
+library(xgboost)
+library(tidyverse)
+library(leaflet)
+library(stringr)
+library(rgdal)
+library(lubridate)
+library(forecast)
+library(DT)
+library(prophet)
+library(caret)
+
+##Read the data
+mergedf <- read.csv("~/Desktop/DMProject/CrimeRentData.csv")
+
+set.seed(12345)
+LACrimeDataSet = mergedf %>% select(Year, CrimeCode, Amount,Neighborhood)
+
+LACrimeDataSet = na.omit(LACrimeDataSet)
+
+mergedf<-LACrimeDataSet
+
+##Create Amount categories
+mergedf$Amount <- as.numeric(mergedf$Amount)
+
+ra <- range(mergedf$Amount)
+div <- (ra[2]-ra[1])/10
+ini <- ra[1]
+br <- rep(0,11)
+br[1]<-ra[1]
+for(i in 2:11){
+  ini<-ini+div
+  br[i]<-ini
+}
+
+mergedf$Renth <- cut(mergedf$Amount, 
+                     breaks=br, 
+                     labels=c("1","2","3","4","5","6","7","8","9","10"))
+
+mergedf <- within(mergedf,rm("Amount"))
+
+LACrimeDataSet2 = mergedf %>% select(-Renth)
+
+features <- colnames(LACrimeDataSet2)
+
+for (f in features) {
+  if ((class(LACrimeDataSet2[[f]])=="factor") || (class(LACrimeDataSet2[[f]])=="character")) {
+    levels <- unique(LACrimeDataSet2[[f]])
+    LACrimeDataSet2[[f]] <- as.numeric(factor(LACrimeDataSet2[[f]], levels=levels))
+  }
+}
+
+
+LACrimeDataSet2$Renth = as.factor(mergedf$Renth)
+LACrimeDataSet2 <- na.omit(LACrimeDataSet2)
+levels(LACrimeDataSet2$Renth) = make.names(unique(LACrimeDataSet2$Renth))
+
+
+
+library(caret)
+
+attach(LACrimeDataSet2)
+
+#Sample
+train <- sample(nrow(LACrimeDataSet2),0.7*nrow(LACrimeDataSet2))
+traindata <- data.frame(LACrimeDataSet2[train,])
+testdata <- data.frame(LACrimeDataSet2[-train,])
+
+formula = Renth ~ .
+
+fitControl <- trainControl(method="cv",number = 3,classProbs = TRUE,summaryFunction=mnLogLoss)
+
+xgbGrid <- expand.grid(nrounds = 3,
+                       max_depth = 3,
+                       eta = .05,
+                       gamma = 0,
+                       colsample_bytree = .8,
+                       min_child_weight = 1,
+                       subsample = 1)
+
+set.seed(13)
+
+traindata$Renth<- factor(traindata$Renth)
+
+LACrimeXGB = train(data = traindata, formula,
+                   method = "xgbTree",trControl = fitControl,
+                   tuneGrid = xgbGrid,na.action = na.omit,
+                   objective='multi:softprob',metric = "logLoss",
+                   num_class=length(unique(traindata$Renth)))
+
+
+importance = varImp(LACrimeXGB)
+
+varImportance <- data.frame(Variables = row.names(importance[[1]]), 
+                            Importance = round(importance[[1]]$Overall,2))
+
+
+# Create a rank variable based on importance
+rankImportance <- varImportance %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance)))) %>%
+  head(10)
+
+rankImportancefull = rankImportance
+
+library(ggplot2)
+fillColor = "#FFA07A"
+ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
+                           y = Importance)) +
+  geom_bar(stat='identity',colour="white", fill = fillColor) +
+  geom_text(aes(x = Variables, y = 1, label = Rank),
+            hjust=0, vjust=.5, size = 4, colour = 'black',
+            fontface = 'bold') +
+  labs(x = 'Variables', title = 'Relative Variable Importance') +
+  coord_flip() + 
+  theme_bw()
+
+
+##Testing-------------------------------
+pred <- predict(LACrimeXGB, newdata=testdata)
+
+table1<-table(testdata$Renth,pred)
+
+##Accuracy
+sum=0
+for(i in 1:nrow(table1)){
+  
+  sum=sum+table1[i,i]
+}
+
+(acc= sum/nrow(testdata))
+
+No_of_Records<-rep(0,10)
+for(i in 1:10){
+  No_of_Records[i]<- table1[i,i]
+}
+
+plot(1:10,No_of_Records)
+
+```

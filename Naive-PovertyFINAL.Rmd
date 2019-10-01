@@ -1,0 +1,109 @@
+---
+title: "Naive-PovertyFINAL"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+##Libraries--------------------------------------------
+library(tree)
+library(ISLR)
+library(boot)
+library(xgboost)
+library(tidyverse)
+library(leaflet)
+library(stringr)
+library(rgdal)
+library(lubridate)
+library(forecast)
+library(DT)
+library(prophet)
+library(caret)
+library(fastDummies)
+library(caret)
+library(class)
+library(e1071)
+library(ROCR)
+
+
+##Read the data
+mergedf <- read.csv("~/Desktop/DMProject/CrimeRentPovertyData.csv")
+
+##Remove columns
+mergedf <- within(mergedf, rm("X"))
+mergedf <- within(mergedf, rm("Count"))
+
+
+mergedf = na.omit(mergedf)
+mergedf$Year <- as.factor(mergedf$Year)
+mergedf$CrimeCode <- as.factor(mergedf$CrimeCode)
+mergedf$Neighborhood <- as.factor(mergedf$Neighborhood)
+mergedf$Percent <- as.factor(mergedf$Percent)
+
+##Create Amount categories
+mergedf$Amount <- as.numeric(mergedf$Amount)
+
+ra <- range(mergedf$Amount)
+div <- (ra[2]-ra[1])/10
+ini <- ra[1]
+br <- rep(0,11)
+br[1]<-ra[1]
+for(i in 2:11){
+  ini<-ini+div
+  br[i]<-ini
+}
+
+mergedf$Renth <- cut(mergedf$Amount, 
+                     breaks=br, 
+                     labels=c("1","2","3","4","5","6","7","8","9","10"))
+
+mergedf <- within(mergedf,rm("Amount"))
+mergedf<- within(mergedf, rm("Tract"))
+#Split the data
+set.seed(12345)
+inTrain <- createDataPartition(mergedf$Renth, p=0.7, list=FALSE)
+dftrain <- data.frame(mergedf[inTrain,])
+dftest <- data.frame(mergedf[-inTrain,])
+
+##Regression
+fit1<- naiveBayes(Renth~., data=mergedf)
+
+#fit1
+summary(fit1)
+##Confusion Matrix
+ad <- dftest$Renth
+ppd<- predict(fit1,newdata=dftest[,-6])
+(table1 <- table(ad,ppd))
+
+##Accuracy
+sum=0
+for(i in 1:10){
+  
+  sum=sum+table1[i,i]
+}
+
+(acc= sum/nrow(dftest))
+
+##Graph for visual representation of confusion matrix
+
+cbp2 <- c("yellow","red","blue","black")
+table2 <- data.frame(table1)
+b<- ggplot(table2, aes(ad, ppd,color=Freq)) +
+  geom_point()
+
+b+scale_color_gradientn(colours=cbp2)
+
+
+No_of_Records<-rep(0,10)
+for(i in 1:10){
+  No_of_Records[i]<- table1[i,i]
+}
+
+plot(1:10,No_of_Records)
+
+
+
+```

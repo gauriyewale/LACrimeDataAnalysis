@@ -1,0 +1,130 @@
+---
+title: "Log-MultipleRMD"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+##Libraries--------------------------------------------
+library(tree)
+library(ISLR)
+library(boot)
+library(xgboost)
+library(tidyverse)
+library(leaflet)
+library(stringr)
+library(rgdal)
+library(lubridate)
+library(forecast)
+library(DT)
+library(prophet)
+library(caret)
+library(fastDummies)
+library(caret)
+library(class)
+library(e1071)
+library(ROCR)
+library(neuralnet)
+library(nnet)
+
+
+##Read the data
+mergedf <- read.csv("~/Desktop/DMProject/CrimeRentData.csv")
+
+##Remove columns
+mergedf <- within(mergedf, rm("X"))
+mergedf <- within(mergedf, rm("AreaName"))
+mergedf <- within(mergedf, rm("CrimeCodeDescription"))
+mergedf <- within(mergedf, rm("DRNumber"))
+mergedf <- within(mergedf, rm("Location.x"))
+mergedf <- within(mergedf, rm("PremiseDescription"))
+mergedf <- within(mergedf, rm("Variable"))
+mergedf <- within(mergedf, rm("Location.y"))
+mergedf <- within(mergedf, rm("Date"))
+mergedf <- within(mergedf, rm("VictimDescent"))
+
+
+mergedf = na.omit(mergedf)
+mergedf$Year <- as.factor(mergedf$Year)
+mergedf$CrimeCode <- as.factor(mergedf$CrimeCode)
+mergedf$Neighborhood <- as.factor(mergedf$Neighborhood)
+
+
+##Create dummy var
+dff <- dummy_cols(mergedf, select_columns = c("CrimeCode","Year","Neighborhood") )
+
+##Remove Dummy Columns
+dff<-within(dff, rm("CrimeCode"))
+dff<-within(dff, rm("Neighborhood"))
+dff<-within(dff, rm("Year"))
+
+##Remove extra columns
+dff<-within(dff, rm("DateOccurred"))
+dff<-within(dff, rm("Tract"))
+dff<-within(dff, rm("ReportingDistrict"))
+dff<-within(dff, rm("TimeOccured"))
+dff<-within(dff, rm("VictimAge"))
+dff<-within(dff, rm("VictimSex"))
+dff<-within(dff, rm("PremiseCode"))
+
+
+mergedf <- dff
+
+##Create Amount categories
+
+mergedf$Amount <- as.numeric(mergedf$Amount)
+ra <- range(mergedf$Amount)
+div <- (ra[2]-ra[1])/10
+ini <- ra[1]
+br <- rep(0,11)
+br[1]<-ra[1]
+for(i in 2:11){
+  ini<-ini+div
+  br[i]<-ini
+}
+
+mergedf$Renth <- cut(mergedf$Amount, 
+                   breaks=br, 
+                   labels=c("1","2","3","4","5","6","7","8","9","10"))
+mergedf <- within(mergedf,rm("Amount"))
+
+##Sample
+set.seed(12345)
+train <- sample(nrow(mergedf),0.7*nrow(mergedf))
+traindata <- data.frame(mergedf[train,])
+testdata <- data.frame(mergedf[-train,])
+
+
+##Neural Network - Multinomial Logistic regression
+fit1<- nnet::multinom(Renth~., data=traindata, MaxNWts = 50000)
+
+
+summary(fit1)
+
+##Confusion Matrix
+ad <- testdata$Renth
+pd<- predict(fit1,newdata=testdata)
+(table1 <- table(ad,pd))
+
+
+
+##Accuracy
+sum=0
+for(i in 1:10){
+  
+  sum=sum+table1[i,i]
+}
+
+(acc= sum/nrow(testdata))
+
+No_of_Records<-rep(0,10)
+for(i in 1:10){
+  No_of_Records[i]<- table1[i,i]
+}
+
+plot(1:10,No_of_Records)
+```
